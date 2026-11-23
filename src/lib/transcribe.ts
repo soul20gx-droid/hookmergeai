@@ -4,8 +4,7 @@ import path from "node:path";
 import { ApiError } from "./api";
 import { tmpRoot } from "./storage";
 import { transcribeAudio, type ResolvedAiConfig } from "./providers";
-import { serverAiFallback } from "./env";
-import { getProvider, resolveBaseUrl } from "./providers/registry";
+import { getProvider } from "./providers/registry";
 
 type ExecResult = { stdout: string; stderr: string };
 
@@ -118,8 +117,7 @@ export type TranscriptionResult = { text: string; method: string };
 
 /**
  * Transcribes a local video file with the creator's own provider key.
- * If their provider cannot transcribe, an optional server fallback key is used,
- * otherwise we return a clear, actionable error.
+ * The configured license-owned provider key is the only credential used.
  */
 export async function transcribeVideoFile(
   config: ResolvedAiConfig,
@@ -134,21 +132,6 @@ export async function transcribeVideoFile(
       return { text, method: `${provider.label} transcription` };
     }
 
-    const fallback = serverAiFallback();
-    if (fallback) {
-      const fallbackProvider = getProvider(fallback.provider);
-      if (fallbackProvider?.supportsTranscription) {
-        const fallbackConfig: ResolvedAiConfig = {
-          provider: fallback.provider,
-          kind: fallbackProvider.kind,
-          baseUrl: resolveBaseUrl(fallback.provider),
-          model: fallbackProvider.models[0]?.id ?? "whisper-1",
-          apiKey: fallback.apiKey,
-        };
-        const text = await transcribeAudio(fallbackConfig, audio);
-        return { text, method: `${fallbackProvider.label} (server key) transcription` };
-      }
-    }
 
     throw new ApiError(
       "transcription_unsupported",

@@ -30,6 +30,7 @@ export const POST = withRoute(async (req: NextRequest) => {
     { status: 200 },
   );
   res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(maxAge));
+  res.cookies.set("hm_ai_key", "", { path: "/", maxAge: 0, httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
   return res;
 });
 

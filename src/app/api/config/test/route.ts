@@ -4,8 +4,7 @@ import { requireLicense } from "@/lib/auth";
 import { providerTestSchema } from "@/lib/validation";
 import { assertProvider } from "@/lib/ai-config";
 import { resolveAiConfig, testProviderConnection } from "@/lib/providers";
-import { getStoredAiConfig, decryptedConfigFromRow } from "@/lib/providers";
-import { readSessionConfig } from "@/lib/ai-config";
+import { getStoredAiConfig } from "@/lib/providers";
 import { decryptSecret } from "@/lib/crypto";
 import { limitByIp } from "@/lib/rate-limit";
 
@@ -18,10 +17,6 @@ export const POST = withRoute(async (req: NextRequest) => {
   const provider = assertProvider(body.provider);
 
   let apiKey = body.apiKey?.trim() || "";
-  if (!apiKey) {
-    const sessionCfg = await readSessionConfig();
-    if (sessionCfg && sessionCfg.provider === body.provider) apiKey = sessionCfg.apiKey;
-  }
   if (!apiKey) {
     const stored = getStoredAiConfig(session.licenseId);
     if (stored?.api_key_enc && stored.provider === body.provider) {
@@ -58,4 +53,3 @@ export const POST = withRoute(async (req: NextRequest) => {
   }
 });
 
-void decryptedConfigFromRow;

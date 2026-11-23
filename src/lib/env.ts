@@ -24,7 +24,15 @@ function loadSecrets(): Record<string, string> {
  */
 function secret(name: string): string {
   const fromEnv = process.env[name]?.trim();
-  if (fromEnv) return fromEnv;
+  if (fromEnv) {
+    if (process.env.NODE_ENV === "production" && fromEnv.length < 32) {
+      throw new Error(`${name} must contain at least 32 characters in production.`);
+    }
+    return fromEnv;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(`${name} must be explicitly set in production.`);
+  }
 
   const secrets = loadSecrets();
   if (!secrets[name]) {
@@ -53,13 +61,28 @@ export function databasePath(): string {
   return resolveFromRoot(raw.slice("file:".length));
 }
 
+export function assertProductionEnvironment(): void {
+  if (process.env.NODE_ENV !== "production") return;
+  for (const name of ["LICENSE_SECRET", "ADMIN_SECRET", "ENCRYPTION_KEY"]) {
+    const value = process.env[name]?.trim();
+    if (!value || value.length < 32) {
+      throw new Error(`${name} must be set to at least 32 characters in production.`);
+    }
+  }
+}
+
 export function licenseSecret(): string {
   return secret("LICENSE_SECRET");
 }
 
 export function adminSecret(): string {
   const value = process.env.ADMIN_SECRET?.trim();
-  if (value) return value;
+  if (value) {
+    if (process.env.NODE_ENV === "production" && value.length < 32) {
+      throw new Error("ADMIN_SECRET must contain at least 32 characters in production.");
+    }
+    return value;
+  }
   const generated = secret("ADMIN_SECRET");
   console.warn(
     "[hookmerge] ADMIN_SECRET is not set. Using a generated admin password stored in data/.secrets.json.",
@@ -72,7 +95,11 @@ export function encryptionKey(): string {
 }
 
 export function initialLicenseKey(): string {
-  return (process.env.INITIAL_LICENSE_KEY || "").trim();
+  const value = (process.env.INITIAL_LICENSE_KEY || "").trim();
+  if (process.env.NODE_ENV === "production" && value && value.length < 24) {
+    throw new Error("INITIAL_LICENSE_KEY must contain at least 24 characters in production.");
+  }
+  return value;
 }
 
 export function storageDir(): string {
@@ -87,12 +114,6 @@ export function maxUploadBytes(): number {
 
 export function appUrl(): string {
   return (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
-}
-
-export function serverAiFallback(): { provider: string; apiKey: string } | null {
-  const key = process.env.AI_API_KEY?.trim();
-  if (!key) return null;
-  return { provider: (process.env.AI_PROVIDER || "openai").trim(), apiKey: key };
 }
 
 export function isProduction(): boolean {

@@ -46,7 +46,7 @@ DATABASE_URL=file:./data/hookmerge.db
 LICENSE_SECRET=<32-byte hex>
 ADMIN_SECRET=<your admin password>
 ENCRYPTION_KEY=<32-byte hex>
-INITIAL_LICENSE_KEY=hookmergenotfreeatall
+INITIAL_LICENSE_KEY=<unique-one-time-owner-license>
 STORAGE_DIR=./storage
 MAX_UPLOAD_MB=200
 NEXT_PUBLIC_APP_URL=http://localhost:3000
@@ -57,16 +57,15 @@ If `LICENSE_SECRET`, `ADMIN_SECRET` or `ENCRYPTION_KEY` are missing, the server 
 ### First login
 
 1. Open `/verify`.
-2. Enter `hookmergenotfreeatall` (the seeded `INITIAL_LICENSE_KEY`).
+2. Enter the private one-time owner license you set in `INITIAL_LICENSE_KEY`. Do not use a shared/public default.
 3. Open `/app/config`, choose a provider, paste your key, pick a model, **Test connection**, then **Save**.
 
-> The seeded key is created on first database boot and never reactivated if you revoke it. Change `INITIAL_LICENSE_KEY` before deploying, or delete the database to reseed.
+> The seeded key is created only when you explicitly set `INITIAL_LICENSE_KEY`. Use a random, private value, log in once, create individual invitation keys in `/admin`, then remove `INITIAL_LICENSE_KEY` from the production environment. Never publish a real invite key in README or source control.
 
 ### Admin console
 
-Open `/admin` and sign in with `ADMIN_SECRET` (from `.env.local`, or the generated value printed in the server log / stored in `data/.secrets.json`).
+Open `/admin` and sign in with the private `ADMIN_SECRET`. Admin can generate unique invite/license keys, set expiry and generation limits, revoke/reactivate/delete licenses, search issued keys, inspect usage and configure defaults. Issue one license per person; anyone who possesses a license key can access that license account and its data.
 
-Admin can generate batches of keys, set expiry and generation limits, revoke/reactivate/delete licenses, search issued keys, inspect usage and configure defaults.
 
 ---
 
@@ -74,7 +73,7 @@ Admin can generate batches of keys, set expiry and generation limits, revoke/rea
 
 1. **Niche** — free text, long-tail encouraged.
 2. **Reference** — upload MP4/MOV/WEBM/M4V, paste a YouTube link, or paste a transcript.
-3. **AI brain** — provider, model, key (stored encrypted or session-only).
+3. **AI brain** — provider, model, key (stored encrypted separately for each license).
 4. **Mode + length** — Fast / Balanced / Premium and 15–90 seconds.
 5. **Generate** — the job manager streams real stage updates: processing reference → extracting transcript → analysing storytelling → understanding niche → generating script → finalizing.
 6. **Results** — hook, full script, structure, the 15-signal analysis, generation details, and working actions: copy, download TXT, edit/save, regenerate, improve hook, more engaging, shorten, expand, new version. Every action creates a new saved version.
@@ -107,7 +106,7 @@ src/
     db.ts                    Schema, seeding, settings
     license.ts auth.ts       License lifecycle + server sessions
     providers/               registry + OpenAI-compatible and Gemini adapters
-    ai-config.ts             Encrypted/session key resolution per request
+    ai-config.ts             Per-license encrypted key resolution per request
     pipeline.ts              Job runner + rewrite actions
     prompts.ts               Analysis, strategy, script and revision prompts
     youtube.ts transcribe.ts storage.ts
@@ -126,7 +125,7 @@ src/
 - Verification returns an HttpOnly `hm_session` cookie backed by a hashed token in SQLite, 7-day expiry.
 - Every protected route re-loads the license, re-checks revocation/expiry, and scopes all queries by `license_id`.
 - Admin auth is completely separate (`hm_admin`, 12 hours) and every admin route calls `requireAdmin()`.
-- API keys: AES-256-GCM encrypted at rest, or kept in an encrypted HttpOnly cookie for the session-only option. Never returned to the browser — only a masked preview.
+- API keys: AES-256-GCM encrypted at rest in `ai_configs`, keyed by `license_id`. Keys are never returned to the browser — only a masked preview. Each license has its own provider configuration. There is no session-only or shared server-key mode in this invite-only build.
 - Rate limits on license verification (8/min/IP), admin login (6/min/IP), generation and uploads.
 - Upload validation: extension allow-list, MIME sanity check, size cap, path traversal guard.
 - Deliberately generic error copy for unauthenticated requests so keys cannot be enumerated.
@@ -136,9 +135,36 @@ src/
 
 ## Notes & limits
 
-- **AI credentials are required.** Without a working provider key, generation stops with a clear error. This is intentional — there is no fake mode.
+- **AI credentials are required per license.** Each invited user must supply their own provider key. HookMerge does not use an operator-owned fallback key, so your account does not pay for user generations.
 - **Transcription needs ffmpeg.** Without ffmpeg, uploads rely on a pasted transcript. NVIDIA NIM and OpenRouter are text-only providers, so uploads also need a transcript there (or OpenAI/Groq/Gemini for audio).
 - **YouTube captions** can be unavailable (no captions, age/login restriction, or server-side YouTube blocking). The UI then asks for a transcript.
 - **Storage is local** (`./storage`) and the database is a local SQLite file. Deploy on a host with a persistent disk. Swapping to Postgres/S3 means replacing `src/lib/db.ts` and `src/lib/storage.ts`.
 - Billing is not integrated: licenses are issued by the operator through `/admin`, as described on the landing page.
 - Generated scripts are drafts. Review before publishing and respect the platforms you publish to.
+
+
+## Production deployment (Docker + persistent VM)
+
+This app needs a persistent Node.js process, SQLite files, local upload storage and FFmpeg. Do not deploy this repository unchanged to static hosting or edge/serverless platforms.
+
+1. Create a private GitHub repository and keep `.env`, `.env.production`, database files, uploads and backups out of Git.
+2. Provision an Ubuntu 24.04 ARM64 VM with at least 2 GB RAM (Oracle Cloud Always Free Ampere A1 is the preferred zero-monthly-cost target when capacity is available).
+3. Install Docker Engine and the Docker Compose plugin.
+4. Point a domain or free dynamic-DNS hostname to the VM public IP and allow inbound TCP 80/443 and SSH in both the cloud security list and Ubuntu firewall.
+5. Copy `.env.example` to `.env` on the VM. Generate unique random 32-byte hex values for `LICENSE_SECRET` and `ENCRYPTION_KEY`, and a long unique `ADMIN_SECRET`; set `DOMAIN` and `NEXT_PUBLIC_APP_URL` to your HTTPS hostname. Do not configure a shared AI provider key. Set a unique random `INITIAL_LICENSE_KEY` only for the first owner login.
+6. Run `docker compose up -d --build`. Caddy obtains and renews the HTTPS certificate automatically when DNS and ports are correct.
+7. Open `/verify` and log in with the private one-time owner license. Open `/admin`, create a separate invite key for each user, and securely send each key privately.
+8. Remove `INITIAL_LICENSE_KEY` from `.env` and restart with `docker compose up -d` after the owner has logged in and created invites. The existing database retains issued licenses.
+9. Back up the `hookmerge_data` and `hookmerge_storage` Docker volumes regularly. Keep the encryption key and license secret backed up separately; losing them can make stored API keys or license verification unusable.
+
+### Required production environment variables
+
+`LICENSE_SECRET`, `ADMIN_SECRET`, and `ENCRYPTION_KEY` must be explicitly set in production. The app refuses to silently generate production secrets. `INITIAL_LICENSE_KEY` is optional and should be removed after initial owner setup. The server does not use an operator-owned AI key; every license must save its own provider key.
+
+### Invitation and account isolation
+
+The license key is the user's account identity in this version. Issue one unique license per invited person. A person with a license key can access the scripts and AI configuration attached to that license, so never reuse or publicly post keys. The admin console can revoke a key immediately.
+
+### Backups and recovery
+
+Use a scheduled backup of both persistent volumes and store encrypted copies off the VM. Restore the database, uploads and the exact same `LICENSE_SECRET` and `ENCRYPTION_KEY` together. Do not publish backup archives.

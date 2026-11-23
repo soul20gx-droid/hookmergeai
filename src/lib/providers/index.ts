@@ -15,7 +15,7 @@ export type StoredAiConfigRow = {
   base_url: string;
   model: string;
   api_key_enc: string | null;
-  key_mode: "stored" | "session";
+  key_mode: "stored" | "session"; // session retained for compatibility with existing database rows
   updated_at: number;
 };
 
@@ -42,12 +42,31 @@ export function resolveAiConfig(input: {
     );
   }
   const baseUrl = resolveBaseUrl(input.provider, input.baseUrl);
-  if (!baseUrl || !/^https?:\/\//i.test(baseUrl)) {
+  if (!baseUrl || !/^https:\/\//i.test(baseUrl)) {
     throw new ApiError(
       "invalid_base_url",
-      "Enter a valid API base URL (https://…).",
+      "Enter a valid HTTPS API base URL.",
       400,
       "Example: https://api.together.xyz/v1",
+    );
+  }
+  try {
+    const parsed = new URL(baseUrl);
+    const host = parsed.hostname.toLowerCase();
+    const localHost =
+      host === "localhost" || host.endsWith(".localhost") || host === "::1" ||
+      host === "0.0.0.0" || host === "127.0.0.1" || host.startsWith("127.") ||
+      host === "169.254.169.254" || host.startsWith("10.") ||
+      host.startsWith("192.168.") ||
+      /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host) ||
+      host.endsWith(".internal") || host.endsWith(".local");
+    if (parsed.username || parsed.password || parsed.search || parsed.hash || localHost) throw new Error("unsafe");
+  } catch {
+    throw new ApiError(
+      "invalid_base_url",
+      "That API base URL is not allowed.",
+      400,
+      "Use a public HTTPS endpoint without embedded credentials, query parameters, or local/private hostnames.",
     );
   }
   if (!input.model.trim()) {

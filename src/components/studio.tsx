@@ -57,7 +57,7 @@ type YouTubeMeta = {
   url: string;
 };
 
-type ConfigResponse = { config: AiConfigView; providers: ProviderInfo[]; serverKeyAvailable: boolean };
+type ConfigResponse = { config: AiConfigView; providers: ProviderInfo[] };
 
 const NICHES = ["Gaming lore", "History mysteries", "Personal finance", "Horror stories", "Tech explainers", "Motivation"];
 
@@ -826,7 +826,7 @@ export function Studio() {
                 </div>
                 <p className="mt-2 flex items-center gap-1.5 text-[10px] text-muted/70">
                   <Lock className="h-3 w-3" />
-                  {config.keyMode === "session" ? "Session-only key (12h)" : "Key encrypted at rest"}
+                  Key encrypted at rest
                   {providerDef?.supportsTranscription ? " · audio transcription ready" : " · transcript needed for uploads"}
                 </p>
                 <Link href="/app/config" className="btn-secondary btn-sm mt-3 w-full">

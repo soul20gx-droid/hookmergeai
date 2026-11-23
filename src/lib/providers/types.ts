@@ -1,4 +1,6 @@
 import { ApiError } from "../api";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 
 export type ChatRole = "system" | "user" | "assistant";
 export type ChatMessage = { role: ChatRole; content: string };
@@ -19,18 +21,72 @@ export type ChatOptions = {
   signal?: AbortSignal;
 };
 
+function isPublicAddress(address: string): boolean {
+  const value = address.toLowerCase().split("%")[0];
+  const family = isIP(value);
+  if (family === 4) {
+    const octets = value.split(".").map(Number);
+    const [a, b] = octets;
+    return !(
+      a === 0 || a === 10 || a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 192 && b === 0) ||
+      (a === 192 && b === 2) ||
+      (a === 198 && (b === 18 || b === 19 || b === 51)) ||
+      (a === 203 && b === 0) ||
+      a >= 224
+    );
+  }
+  // Permit globally-routable IPv6 unicast only; reject loopback, ULA,
+  // link-local, multicast, unspecified and IPv4-mapped addresses.
+  return family === 6 && /^[23]/.test(value);
+}
+
+async function assertPublicHttpsTarget(rawUrl: string): Promise<void> {
+  let target: URL;
+  try {
+    target = new URL(rawUrl);
+  } catch {
+    throw new ApiError("invalid_provider_url", "The AI provider URL is invalid.", 400);
+  }
+  if (target.protocol !== "https:" || target.username || target.password) {
+    throw new ApiError("invalid_provider_url", "AI provider requests must use public HTTPS endpoints.", 400);
+  }
+  const hostname = target.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local") || hostname.endsWith(".internal")) {
+    throw new ApiError("provider_url_blocked", "Private or local provider endpoints are not allowed.", 400);
+  }
+  try {
+    const addresses = isIP(hostname) ? [{ address: hostname }] : await lookup(hostname, { all: true, verbatim: true });
+    if (!addresses.length || addresses.some((entry) => !isPublicAddress(entry.address))) {
+      throw new Error("non-public address");
+    }
+  } catch {
+    throw new ApiError(
+      "provider_url_blocked",
+      "That provider hostname does not resolve exclusively to public IP addresses.",
+      400,
+      "Use a public HTTPS API endpoint. Localhost, private networks and cloud metadata endpoints are blocked.",
+    );
+  }
+}
+
 export async function fetchWithTimeout(
   url: string,
   init: RequestInit,
   timeoutMs: number,
   external?: AbortSignal,
 ): Promise<Response> {
+  await assertPublicHttpsTarget(url);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new Error("timeout")), timeoutMs);
   const onAbort = () => controller.abort(new Error("cancelled"));
   external?.addEventListener("abort", onAbort, { once: true });
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetch(url, { ...init, signal: controller.signal, redirect: "error" });
   } catch (err) {
     if (external?.aborted) {
       throw new ApiError("request_cancelled", "The generation was cancelled.", 409);

@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
-import { databasePath, initialLicenseKey } from "./env";
+import { assertProductionEnvironment, databasePath, initialLicenseKey } from "./env";
 import { hashLicenseKey, normalizeLicenseKey } from "./crypto";
 
 declare global {
@@ -150,6 +150,7 @@ function seed(db: DatabaseSync) {
 }
 
 export function getDb(): DatabaseSync {
+  assertProductionEnvironment();
   if (globalThis.__hookmergeDb) return globalThis.__hookmergeDb;
   const file = databasePath();
   fs.mkdirSync(path.dirname(file), { recursive: true });

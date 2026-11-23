@@ -22,7 +22,7 @@ import {
 import type { AiConfigView, ProviderInfo } from "@/lib/types";
 import { apiFetch, ClientError, formatDateTime } from "@/lib/client";
 
-type ConfigResponse = { config: AiConfigView; providers: ProviderInfo[]; serverKeyAvailable: boolean };
+type ConfigResponse = { config: AiConfigView; providers: ProviderInfo[] };
 
 type Message = { type: "success" | "error"; text: string; hint?: string } | null;
 
@@ -35,7 +35,6 @@ export function AiConfigPanel() {
   const [model, setModel] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const [keyMode, setKeyMode] = useState<"stored" | "session">("stored");
   const [reveal, setReveal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -53,7 +52,6 @@ export function AiConfigPanel() {
         setProvider(data.config.provider || "openai");
         setModel(data.config.model || data.providers.find((p) => p.id === data.config.provider)?.models[0]?.id || "");
         setBaseUrl(data.config.baseUrl || "");
-        setKeyMode(data.config.keyMode === "session" ? "session" : "stored");
       })
       .catch((err: ClientError) => {
         if (err.status === 401) router.replace("/verify");
@@ -85,7 +83,7 @@ export function AiConfigPanel() {
     if (selected.allowCustomBaseUrl && !/^https?:\/\//i.test(baseUrl.trim())) {
       return "Enter your endpoint base URL, for example https://api.together.xyz/v1.";
     }
-    if (!config?.hasKey && !apiKey.trim()) return "Paste your API key.";
+    if (!(config?.hasKey && config.provider === provider) && !apiKey.trim()) return "Paste your API key.";
     return null;
   }
 
@@ -96,7 +94,7 @@ export function AiConfigPanel() {
       setMessage({ type: "error", text: "Choose a model before testing." });
       return;
     }
-    if (!apiKey.trim() && !config?.hasKey) {
+    if (!apiKey.trim() && !(config?.hasKey && config.provider === provider)) {
       setMessage({ type: "error", text: "Paste an API key to test the connection." });
       return;
     }
@@ -104,7 +102,7 @@ export function AiConfigPanel() {
     try {
       const data = await apiFetch<{ latencyMs: number; model: string; provider: string }>("/api/config/test", {
         method: "POST",
-        body: JSON.stringify({ provider, model, baseUrl, apiKey: apiKey.trim() || undefined, keyMode }),
+        body: JSON.stringify({ provider, model, baseUrl, apiKey: apiKey.trim() || undefined }),
       });
       setTestResult({ latencyMs: data.latencyMs, model: data.model });
       setMessage({
@@ -135,14 +133,14 @@ export function AiConfigPanel() {
           model: model.trim(),
           baseUrl: baseUrl.trim(),
           apiKey: apiKey.trim() || undefined,
-          keyMode,
+          keyMode: "stored",
         }),
       });
       setConfig(data.config);
       setApiKey("");
       setMessage({
         type: "success",
-        text: keyMode === "session" ? "Saved for this session (12 hours)." : "Configuration saved and encrypted.",
+        text: "Configuration saved and encrypted for your license.",
       });
     } catch (err) {
       const clientError = err as ClientError;
@@ -204,7 +202,7 @@ export function AiConfigPanel() {
                 Connected: {config.provider} · {config.model}
               </p>
               <p className="mt-0.5 text-[10px] text-muted">
-                {config.keyMode === "session" ? "Session-only key" : `Stored key ${config.maskedKey ?? ""}`}
+                {`Encrypted key ${config.maskedKey ?? ""}`}
                 {config.updatedAt ? ` · updated ${formatDateTime(config.updatedAt)}` : ""}
               </p>
             </div>
@@ -365,37 +363,13 @@ export function AiConfigPanel() {
           </div>
         )}
 
-        <div className="mt-5">
-          <p className="label">Key storage</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {[
-              {
-                id: "stored" as const,
-                title: "Store encrypted",
-                body: "AES-256-GCM at rest. Survives restarts and browser changes.",
-              },
-              {
-                id: "session" as const,
-                title: "Session only",
-                body: "Encrypted HttpOnly cookie, 12 hours. Never written to the database.",
-              },
-            ].map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setKeyMode(option.id)}
-                className={`rounded-xl border p-3 text-left transition ${
-                  keyMode === option.id ? "border-lavender-400/45 bg-lavender-400/[0.08]" : "border-white/[0.07]"
-                }`}
-              >
-                <span className="flex items-center justify-between text-[11px] font-medium text-white">
-                  {option.title}
-                  {keyMode === option.id && <CheckCircle2 className="h-3.5 w-3.5 text-lavender-300" />}
-                </span>
-                <span className="mt-1 block text-[10px] leading-relaxed text-muted">{option.body}</span>
-              </button>
-            ))}
-          </div>
+        <div className="mt-5 rounded-xl border border-neon-400/20 bg-neon-400/[0.05] p-3.5">
+          <p className="flex items-center gap-2 text-[11px] font-semibold text-neon-300">
+            <ShieldCheck className="h-3.5 w-3.5" /> Encrypted storage per license
+          </p>
+          <p className="mt-1 text-[10px] leading-relaxed text-muted">
+            Your API key is encrypted with AES-256-GCM and stored separately for your license. It is never shown again in full.
+          </p>
         </div>
 
         {selected && !selected.supportsTranscription && (

@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { ApiError } from "./api";
 import { decryptSecret, encryptSecret, maskSecret } from "./crypto";
 import { getDb } from "./db";
@@ -14,57 +13,7 @@ import {
 } from "./providers";
 import type { AiConfigView } from "./types";
 
-const KEY_COOKIE = "hm_ai_key";
-const KEY_COOKIE_TTL_SECONDS = 12 * 60 * 60;
-
-type SessionConfig = { provider: string; model: string; baseUrl: string; apiKey: string };
-
-function parseSessionConfig(value: string | undefined): SessionConfig | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(decryptSecret(value)) as SessionConfig;
-    if (!parsed?.apiKey || !parsed?.provider || !parsed?.model) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-export function encodeSessionConfig(config: SessionConfig): string {
-  return encryptSecret(JSON.stringify(config));
-}
-
-export function sessionKeyCookie(value: string | null) {
-  return {
-    name: KEY_COOKIE,
-    value: value ?? "",
-    httpOnly: true,
-    sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: value ? KEY_COOKIE_TTL_SECONDS : 0,
-  };
-}
-
-export async function readSessionConfig(): Promise<SessionConfig | null> {
-  const cookie = (await cookies()).get(KEY_COOKIE)?.value;
-  return parseSessionConfig(cookie);
-}
-
 export async function getAiConfigView(licenseId: string): Promise<AiConfigView> {
-  const session = await readSessionConfig();
-  if (session) {
-    return {
-      provider: session.provider,
-      model: session.model,
-      baseUrl: session.baseUrl,
-      keyMode: "session",
-      hasKey: true,
-      maskedKey: maskSecret(session.apiKey),
-      updatedAt: null,
-    };
-  }
-
   const stored = getStoredAiConfig(licenseId);
   if (!stored) {
     return {
@@ -133,12 +82,8 @@ export function storedResolvedConfig(licenseId: string): ResolvedAiConfig | null
   return decryptedConfigFromRow(row);
 }
 
-/** The config to use for this request: session key first, then stored key. */
+/** Resolve only the encrypted configuration owned by this license. */
 export async function resolveRequestAiConfig(licenseId: string): Promise<ResolvedAiConfig> {
-  const session = await readSessionConfig();
-  if (session) {
-    return resolveAiConfig(session);
-  }
   const stored = storedResolvedConfig(licenseId);
   if (stored) return stored;
 

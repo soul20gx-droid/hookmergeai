@@ -29,9 +29,8 @@ export default function PrivacyPage() {
             </li>
             <li>
               <strong className="text-white">AI configuration:</strong> provider, model, endpoint and
-              your API key encrypted with AES-256-GCM before it is written to the database. If you
-              choose a session-only key, it is kept in an encrypted HttpOnly cookie for twelve hours
-              and never stored in the database.
+              your API key encrypted with AES-256-GCM before it is written to the database. Each
+              configuration is associated with one license ID and is not shared with other licenses.
             </li>
             <li>
               <strong className="text-white">Uploaded references:</strong> the video file, its name,
@@ -67,10 +66,6 @@ export default function PrivacyPage() {
             <li>
               <code className="text-white/80">hm_session</code> — your license session (HttpOnly,
               SameSite=Lax).
-            </li>
-            <li>
-              <code className="text-white/80">hm_ai_key</code> — optional session-only AI key,
-              encrypted (HttpOnly, twelve hours).
             </li>
             <li>
               <code className="text-white/80">hm_admin</code> — operator admin session, set only

@@ -5,17 +5,12 @@ import { aiConfigSchema } from "@/lib/validation";
 import {
   assertProvider,
   deleteStoredAiConfig,
-  encodeSessionConfig,
   getAiConfigView,
-  readSessionConfig,
   saveStoredAiConfig,
-  sessionKeyCookie,
-  storedResolvedConfig,
 } from "@/lib/ai-config";
 import { PROVIDERS, resolveAiConfig } from "@/lib/providers";
 import { decryptSecret } from "@/lib/crypto";
 import { getStoredAiConfig } from "@/lib/providers";
-import { serverAiFallback } from "@/lib/env";
 import { limitByIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -27,7 +22,6 @@ export const GET = withRoute(async () => {
   return ok({
     config: view,
     providers: PROVIDERS,
-    serverKeyAvailable: Boolean(serverAiFallback()),
   });
 });
 
@@ -52,44 +46,7 @@ export const PUT = withRoute(async (req: NextRequest) => {
 
   if (body.keyMode === "none") {
     deleteStoredAiConfig(session.licenseId);
-    const res = ok({ config: await getAiConfigView(session.licenseId) });
-    res.cookies.set(sessionKeyCookie(null));
-    return res;
-  }
-
-  if (body.keyMode === "session") {
-    if (!body.apiKey?.trim()) {
-      throw new ApiError("missing_api_key", "Paste your API key to use a session-only key.", 400);
-    }
-    const resolved = resolveAiConfig({
-      provider: body.provider,
-      model,
-      baseUrl: body.baseUrl,
-      apiKey: body.apiKey,
-    });
-    deleteStoredAiConfig(session.licenseId);
-    const res = ok({
-      config: {
-        provider: resolved.provider,
-        model: resolved.model,
-        baseUrl: resolved.baseUrl,
-        keyMode: "session" as const,
-        hasKey: true,
-        maskedKey: "•••• session only",
-        updatedAt: Date.now(),
-      },
-    });
-    res.cookies.set(
-      sessionKeyCookie(
-        encodeSessionConfig({
-          provider: resolved.provider,
-          model: resolved.model,
-          baseUrl: resolved.baseUrl,
-          apiKey: resolved.apiKey,
-        }),
-      ),
-    );
-    return res;
+    return ok({ config: await getAiConfigView(session.licenseId) });
   }
 
   // stored: reuse the existing key when the user only changes provider/model.
@@ -99,10 +56,6 @@ export const PUT = withRoute(async (req: NextRequest) => {
   // would be sent to the wrong API and fail with a misleading auth error.
   if (!apiKey && existing?.api_key_enc && existing.provider === body.provider) {
     apiKey = decryptSecret(existing.api_key_enc);
-  }
-  if (!apiKey) {
-    const sessionCfg = await readSessionConfig();
-    if (sessionCfg && sessionCfg.provider === body.provider) apiKey = sessionCfg.apiKey;
   }
   if (!apiKey) {
     throw new ApiError(
@@ -120,17 +73,12 @@ export const PUT = withRoute(async (req: NextRequest) => {
     apiKey,
   });
 
-  const res = ok({ config: await getAiConfigView(session.licenseId) });
-  res.cookies.set(sessionKeyCookie(null));
-  return res;
+  return ok({ config: await getAiConfigView(session.licenseId) });
 });
 
 export const DELETE = withRoute(async () => {
   const session = await requireLicense();
   deleteStoredAiConfig(session.licenseId);
-  const res = ok({ config: await getAiConfigView(session.licenseId) });
-  res.cookies.set(sessionKeyCookie(null));
-  return res;
+  return ok({ config: await getAiConfigView(session.licenseId) });
 });
 
-void storedResolvedConfig;

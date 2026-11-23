@@ -19,7 +19,7 @@ export const aiConfigSchema = z
     model: z.string().min(1, "Choose or type a model").max(200),
     baseUrl: z.string().trim().max(400).optional().default(""),
     apiKey: z.string().trim().max(500).optional(),
-    keyMode: z.enum(["stored", "session", "none"]).optional().default("stored"),
+    keyMode: z.enum(["stored", "none"]).optional().default("stored"),
   })
   .refine((v) => !/^data:/i.test(v.apiKey ?? ""), { message: "That does not look like an API key" });
 
@@ -28,7 +28,6 @@ export const providerTestSchema = z.object({
   model: z.string().trim().max(200).optional().default(""),
   baseUrl: z.string().trim().max(400).optional().default(""),
   apiKey: z.string().trim().max(500).optional(),
-  keyMode: z.enum(["stored", "session", "none"]).optional().default("stored"),
 });
 
 export const jobCreateSchema = z.object({

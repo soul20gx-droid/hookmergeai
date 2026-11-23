@@ -132,7 +132,7 @@ export type AiConfigView = {
   provider: string;
   model: string;
   baseUrl: string;
-  keyMode: "stored" | "session" | "none";
+  keyMode: "stored" | "none";
   hasKey: boolean;
   maskedKey: string | null;
   updatedAt: number | null;
