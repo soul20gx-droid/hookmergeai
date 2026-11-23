@@ -18,7 +18,7 @@ export const POST = withRoute(async (req: NextRequest) => {
 
   let apiKey = body.apiKey?.trim() || "";
   if (!apiKey) {
-    const stored = getStoredAiConfig(session.licenseId);
+    const stored = getStoredAiConfig(session.accountId);
     if (stored?.api_key_enc && stored.provider === body.provider) {
       apiKey = decryptSecret(stored.api_key_enc);
     }

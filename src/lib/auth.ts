@@ -1,16 +1,24 @@
 import { cookies } from "next/headers";
-import { getDb } from "./db";
+import { getDb, transaction } from "./db";
 import { randomToken, sha256Hex, safeEqual } from "./crypto";
 import { adminSecret } from "./env";
 import { ApiError } from "./api";
-import { activateLicense, checkLicenseUsable, findLicenseById, licenseToView, type LicenseRow } from "./license";
+import {
+  activateLicense,
+  checkLicenseUsable,
+  ensureLicenseAccount,
+  findLicenseByKey,
+  findLicenseById,
+  licenseToView,
+  type LicenseRow,
+} from "./license";
 
 export const SESSION_COOKIE = "hm_session";
 export const ADMIN_COOKIE = "hm_admin";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const ADMIN_TTL_MS = 12 * 60 * 60 * 1000;
 
-export type LicensedSession = { license: LicenseRow; licenseId: string };
+export type LicensedSession = { license: LicenseRow; licenseId: string; accountId: string };
 
 export function sessionCookieOptions(maxAgeSeconds: number) {
   return {
@@ -33,6 +41,50 @@ export function createSession(licenseId: string): { token: string; maxAge: numbe
   const license = findLicenseById(licenseId);
   if (license) activateLicense(license);
   return { token, maxAge: Math.floor(SESSION_TTL_MS / 1000) };
+}
+
+/**
+ * Validate a submitted key, activate it (first use only, atomically), retrieve
+ * or create its account, and issue a fresh session — all in one transaction.
+ * Reusing the same key on another device opens the same account.
+ */
+export function activateLicenseKey(rawKey: string): {
+  license: LicenseRow;
+  token: string;
+  maxAge: number;
+  accountId: string;
+} {
+  const license = findLicenseByKey(rawKey);
+  const check = checkLicenseUsable(license);
+  if (!check.ok || !license) {
+    throw new ApiError(
+      check.ok ? "invalid_license" : check.code,
+      check.ok ? "That license key isn't valid." : check.message,
+      401,
+      check.ok ? undefined : check.hint,
+    );
+  }
+
+  return transaction(() => {
+    const db = getDb();
+    const now = Date.now();
+    db.prepare(
+      "UPDATE licenses SET activated_at = COALESCE(activated_at, ?), last_seen_at = ? WHERE id = ? AND status = 'active'",
+    ).run(now, now, license.id);
+
+    const accountId = ensureLicenseAccount(license);
+    const token = randomToken(32);
+    db.prepare(
+      "INSERT INTO sessions (token_hash, license_id, created_at, expires_at, last_seen_at) VALUES (?, ?, ?, ?, ?)",
+    ).run(sha256Hex(token), license.id, now, now + SESSION_TTL_MS, now);
+
+    return {
+      license: findLicenseById(license.id)!,
+      token,
+      maxAge: Math.floor(SESSION_TTL_MS / 1000),
+      accountId,
+    };
+  });
 }
 
 export function destroySession(token: string) {
@@ -73,7 +125,7 @@ export async function getSession(): Promise<LicensedSession | null> {
     getDb().prepare("UPDATE licenses SET last_seen_at = ? WHERE id = ?").run(now, license.id);
   }
 
-  return { license, licenseId: license.id };
+  return { license, licenseId: license.id, accountId: ensureLicenseAccount(license) };
 }
 
 export async function requireLicense(): Promise<LicensedSession> {

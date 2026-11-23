@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const GET = withRoute(async () => {
   const session = await requireLicense();
   return ok({
-    scripts: listScripts(session.licenseId),
-    total: countScripts(session.licenseId),
+    scripts: listScripts(session.accountId),
+    total: countScripts(session.accountId),
   });
 });

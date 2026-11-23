@@ -4,6 +4,7 @@ import type { Analysis, ScriptRecord, ScriptStructure, ScriptSummary, Mode } fro
 export type ScriptRow = {
   id: string;
   license_id: string;
+  account_id: string | null;
   parent_id: string | null;
   title: string;
   hook: string;
@@ -44,12 +45,12 @@ export function scriptRowToRecord(row: ScriptRow): ScriptRecord {
   };
 }
 
-export function listScripts(licenseId: string): ScriptSummary[] {
+export function listScripts(accountId: string): ScriptSummary[] {
   const rows = getDb()
     .prepare(
-      "SELECT id, title, hook, niche, duration, mode, provider, model, created_at, updated_at FROM scripts WHERE license_id = ? ORDER BY created_at DESC LIMIT 200",
+      "SELECT id, title, hook, niche, duration, mode, provider, model, created_at, updated_at FROM scripts WHERE account_id = ? ORDER BY created_at DESC LIMIT 200",
     )
-    .all(licenseId) as Pick<
+    .all(accountId) as Pick<
     ScriptRow,
     "id" | "title" | "hook" | "niche" | "duration" | "mode" | "provider" | "model" | "created_at" | "updated_at"
   >[];
@@ -67,21 +68,22 @@ export function listScripts(licenseId: string): ScriptSummary[] {
   }));
 }
 
-export function getScript(licenseId: string, scriptId: string): ScriptRecord | null {
+export function getScript(accountId: string, scriptId: string): ScriptRecord | null {
   const row = getDb()
-    .prepare("SELECT * FROM scripts WHERE id = ? AND license_id = ?")
-    .get(scriptId, licenseId) as ScriptRow | undefined;
+    .prepare("SELECT * FROM scripts WHERE id = ? AND account_id = ?")
+    .get(scriptId, accountId) as ScriptRow | undefined;
   return row ? scriptRowToRecord(row) : null;
 }
 
-export function countScripts(licenseId: string): number {
-  const row = getDb().prepare("SELECT COUNT(*) as c FROM scripts WHERE license_id = ?").get(licenseId) as {
+export function countScripts(accountId: string): number {
+  const row = getDb().prepare("SELECT COUNT(*) as c FROM scripts WHERE account_id = ?").get(accountId) as {
     c: number;
   };
   return row.c;
 }
 
 export function insertScript(input: {
+  accountId: string;
   licenseId: string;
   parentId?: string | null;
   title: string;
@@ -102,12 +104,13 @@ export function insertScript(input: {
   const now = Date.now();
   getDb()
     .prepare(
-      `INSERT INTO scripts (id, license_id, parent_id, title, hook, body, structure, analysis, niche, duration, mode, provider, model, reference_title, reference_source, generation_ms, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO scripts (id, license_id, account_id, parent_id, title, hook, body, structure, analysis, niche, duration, mode, provider, model, reference_title, reference_source, generation_ms, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
       input.licenseId,
+      input.accountId,
       input.parentId ?? null,
       input.title,
       input.hook,
@@ -125,25 +128,25 @@ export function insertScript(input: {
       now,
       now,
     );
-  return getScript(input.licenseId, id)!;
+  return getScript(input.accountId, id)!;
 }
 
-export function updateScript(licenseId: string, scriptId: string, patch: { title?: string; body?: string }) {
-  const script = getScript(licenseId, scriptId);
+export function updateScript(accountId: string, scriptId: string, patch: { title?: string; body?: string }) {
+  const script = getScript(accountId, scriptId);
   if (!script) return null;
   const title = patch.title ?? script.title;
   const body = patch.body ?? script.body;
   const hook = body.split(/\n\s*\n/)[0]?.trim() || script.hook;
   getDb()
-    .prepare("UPDATE scripts SET title = ?, body = ?, hook = ?, updated_at = ? WHERE id = ? AND license_id = ?")
-    .run(title, body, hook, Date.now(), scriptId, licenseId);
-  return getScript(licenseId, scriptId);
+    .prepare("UPDATE scripts SET title = ?, body = ?, hook = ?, updated_at = ? WHERE id = ? AND account_id = ?")
+    .run(title, body, hook, Date.now(), scriptId, accountId);
+  return getScript(accountId, scriptId);
 }
 
-export function deleteScript(licenseId: string, scriptId: string): boolean {
+export function deleteScript(accountId: string, scriptId: string): boolean {
   const res = getDb()
-    .prepare("DELETE FROM scripts WHERE id = ? AND license_id = ?")
-    .run(scriptId, licenseId);
+    .prepare("DELETE FROM scripts WHERE id = ? AND account_id = ?")
+    .run(scriptId, accountId);
   return Number(res.changes) > 0;
 }
 

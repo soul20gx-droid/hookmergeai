@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 
 export const GET = withRoute(async () => {
   const session = await requireLicense();
-  const view = await getAiConfigView(session.licenseId);
+  const view = await getAiConfigView(session.accountId);
   return ok({
     config: view,
     providers: PROVIDERS,
@@ -45,12 +45,12 @@ export const PUT = withRoute(async (req: NextRequest) => {
   }
 
   if (body.keyMode === "none") {
-    deleteStoredAiConfig(session.licenseId);
-    return ok({ config: await getAiConfigView(session.licenseId) });
+    deleteStoredAiConfig(session.accountId);
+    return ok({ config: await getAiConfigView(session.accountId) });
   }
 
   // stored: reuse the existing key when the user only changes provider/model.
-  const existing = getStoredAiConfig(session.licenseId);
+  const existing = getStoredAiConfig(session.accountId);
   let apiKey = body.apiKey?.trim() || "";
   // Only reuse a saved key for the same provider — a key from another provider
   // would be sent to the wrong API and fail with a misleading auth error.
@@ -66,19 +66,19 @@ export const PUT = withRoute(async (req: NextRequest) => {
     );
   }
 
-  saveStoredAiConfig(session.licenseId, {
+  saveStoredAiConfig(session.accountId, session.licenseId, {
     provider: body.provider,
     model,
     baseUrl: body.baseUrl ?? "",
     apiKey,
   });
 
-  return ok({ config: await getAiConfigView(session.licenseId) });
+  return ok({ config: await getAiConfigView(session.accountId) });
 });
 
 export const DELETE = withRoute(async () => {
   const session = await requireLicense();
-  deleteStoredAiConfig(session.licenseId);
-  return ok({ config: await getAiConfigView(session.licenseId) });
+  deleteStoredAiConfig(session.accountId);
+  return ok({ config: await getAiConfigView(session.accountId) });
 });
 

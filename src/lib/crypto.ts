@@ -27,10 +27,23 @@ export function hashLicenseKey(key: string): string {
   return sha256Hex(`${licenseSecret()}:${normalizeLicenseKey(key)}`);
 }
 
-/** A human-friendly license key; the leading group makes support easier. */
+/** Unambiguous Crockford-style alphabet: no 0/O/1/I to avoid support typos. */
+const LICENSE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+
+/**
+ * A human-friendly license key: HM-XXXX-XXXX-XXXX.
+ * 12 characters from a 32-symbol alphabet = 60 bits of CSPRNG entropy.
+ */
 export function generateLicenseKey(): string {
-  const raw = randomBytes(15).toString("hex").toUpperCase(); // 30 chars
-  return `HM-${raw.match(/.{1,5}/g)!.join("-")}`;
+  const bytes = randomBytes(12);
+  let raw = "";
+  for (let i = 0; i < 12; i++) raw += LICENSE_ALPHABET[bytes[i] % LICENSE_ALPHABET.length];
+  return `HM-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+}
+
+export function isPlausibleLicenseKey(key: string): boolean {
+  const normalized = key.trim();
+  return normalized.length >= 6 && normalized.length <= 100 && /^[A-Za-z0-9-]+$/.test(normalized);
 }
 
 function encryptionKeyBytes(): Buffer {

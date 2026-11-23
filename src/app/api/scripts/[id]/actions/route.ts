@@ -22,12 +22,18 @@ export const POST = withRoute(async (req: NextRequest, ctx) => {
   assertGenerationAllowance(session.license);
 
   const row = getDb()
-    .prepare("SELECT * FROM scripts WHERE id = ? AND license_id = ?")
-    .get(id, session.licenseId) as ScriptRow | undefined;
+    .prepare("SELECT * FROM scripts WHERE id = ? AND account_id = ?")
+    .get(id, session.accountId) as ScriptRow | undefined;
   if (!row) throw new ApiError("script_not_found", "That script could not be found.", 404);
 
-  const config = await resolveRequestAiConfig(session.licenseId);
-  const script = await runScriptAction({ licenseId: session.licenseId, script: row, action, config });
+  const config = await resolveRequestAiConfig(session.accountId);
+  const script = await runScriptAction({
+    accountId: session.accountId,
+    licenseId: session.licenseId,
+    script: row,
+    action,
+    config,
+  });
   if (!script) throw new ApiError("generation_failed", "The revision could not be saved.", 500);
 
   return ok({ script });

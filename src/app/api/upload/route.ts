@@ -65,10 +65,13 @@ export const POST = withRoute(async (req: NextRequest) => {
   }
 
   getDb()
-    .prepare("INSERT INTO files (id, license_id, path, name, size, mime, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .prepare(
+      "INSERT INTO files (id, license_id, account_id, path, name, size, mime, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    )
     .run(
       fileId,
       session.licenseId,
+      session.accountId,
       relPath,
       file.name.slice(0, 240),
       file.size,

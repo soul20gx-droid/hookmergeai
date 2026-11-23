@@ -92,11 +92,15 @@ export type JobView = {
   mode: Mode;
 };
 
+export type LicenseStatus = "unused" | "active" | "expired" | "revoked";
+
 export type LicenseView = {
   id: string;
+  accountId: string;
   label: string | null;
   keyPrefix: string;
-  status: "active" | "revoked";
+  keyLast4: string | null;
+  status: LicenseStatus;
   generationLimit: number | null;
   generationsUsed: number;
   expiresAt: number | null;

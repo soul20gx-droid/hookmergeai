@@ -15,8 +15,8 @@ export const GET = withRoute(async (req: NextRequest, ctx) => {
   const { id } = await ctx.params;
 
   const row = getDb()
-    .prepare("SELECT * FROM files WHERE id = ? AND license_id = ?")
-    .get(id, session.licenseId) as FileRow | undefined;
+    .prepare("SELECT * FROM files WHERE id = ? AND account_id = ?")
+    .get(id, session.accountId) as FileRow | undefined;
   if (!row) throw new ApiError("file_not_found", "That file is not available.", 404);
 
   const abs = absoluteUploadPath(row.path);
@@ -64,11 +64,11 @@ export const DELETE = withRoute(async (_req: NextRequest, ctx) => {
   const session = await requireLicense();
   const { id } = await ctx.params;
   const row = getDb()
-    .prepare("SELECT * FROM files WHERE id = ? AND license_id = ?")
-    .get(id, session.licenseId) as FileRow | undefined;
+    .prepare("SELECT * FROM files WHERE id = ? AND account_id = ?")
+    .get(id, session.accountId) as FileRow | undefined;
   if (!row) throw new ApiError("file_not_found", "That file is not available.", 404);
 
   deleteUpload(row.path);
-  getDb().prepare("DELETE FROM files WHERE id = ? AND license_id = ?").run(id, session.licenseId);
+  getDb().prepare("DELETE FROM files WHERE id = ? AND account_id = ?").run(id, session.accountId);
   return new NextResponse(null, { status: 204 });
 });

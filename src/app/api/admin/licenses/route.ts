@@ -34,23 +34,30 @@ export const POST = withRoute(async (req: NextRequest) => {
   const defaultLimit = Number(getSetting("license_generation_limit_default", "0")) || 0;
   const defaultDays = Number(getSetting("license_validity_days_default", "0")) || 0;
   const generationLimit = body.generationLimit || defaultLimit || 0;
-  const days = body.expiresInDays || defaultDays || 0;
+  // A preset wins over a custom day count; lifetime = no expiry.
+  const days =
+    body.expiry && body.expiry !== "lifetime"
+      ? Number(body.expiry)
+      : body.expiry === "lifetime"
+        ? 0
+        : body.expiresInDays || defaultDays || 0;
   const expiresAt = days > 0 ? Date.now() + days * 24 * 60 * 60 * 1000 : null;
 
-  const created: { id: string; key: string }[] = [];
+  const customerName = (body.customerName || body.label).trim();
+  const created: { id: string; key: string; accountId: string }[] = [];
   for (let i = 0; i < body.quantity; i++) {
-    const label = body.label
+    const name = customerName
       ? body.quantity > 1
-        ? `${body.label} ${i + 1}`
-        : body.label
+        ? `${customerName} ${i + 1}`
+        : customerName
       : `License ${new Date().toISOString().slice(0, 10)}`;
     const result = createLicense({
-      label,
+      customerName: name,
       expiresAt,
       generationLimit: generationLimit > 0 ? generationLimit : null,
       notes: body.notes || null,
     });
-    created.push({ id: result.row.id, key: result.key });
+    created.push({ id: result.row.id, key: result.key, accountId: result.row.account_id ?? "" });
   }
 
   return ok({ created }, 201);

@@ -13,13 +13,13 @@ export const GET = withRoute(async () => {
   if (!session) {
     return NextResponse.json({ ok: true, authenticated: false, license: null });
   }
-  const stored = getStoredAiConfig(session.licenseId);
+  const stored = getStoredAiConfig(session.accountId);
   return NextResponse.json({
     ok: true,
     authenticated: true,
     license: licenseToView(session.license),
     usage: {
-      scripts: countScripts(session.licenseId),
+      scripts: countScripts(session.accountId),
       expired: isExpired(session.license),
       exhausted: isExhausted(session.license),
     },

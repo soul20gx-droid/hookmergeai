@@ -18,7 +18,7 @@ export const POST = withRoute(async (req: NextRequest) => {
   assertGenerationAllowance(session.license);
 
   const body = jobCreateSchema.parse(await readJson(req));
-  const config = await resolveRequestAiConfig(session.licenseId);
+  const config = await resolveRequestAiConfig(session.accountId);
 
   const reference: {
     kind: "file" | "youtube" | "transcript";
@@ -33,8 +33,8 @@ export const POST = withRoute(async (req: NextRequest) => {
       throw new ApiError("missing_reference", "Upload a reference video first.", 400);
     }
     const file = getDb()
-      .prepare("SELECT id FROM files WHERE id = ? AND license_id = ?")
-      .get(body.fileId, session.licenseId);
+      .prepare("SELECT id FROM files WHERE id = ? AND account_id = ?")
+      .get(body.fileId, session.accountId);
     if (!file) {
       throw new ApiError("file_not_found", "That upload isn't available.", 404, "Upload the video again.");
     }
@@ -66,7 +66,7 @@ export const POST = withRoute(async (req: NextRequest) => {
     reference.title = body.referenceTitle || "Pasted transcript";
   }
 
-  const job = createJob(session.licenseId, {
+  const job = createJob(session.accountId, session.licenseId, {
     niche: body.niche,
     duration: body.duration,
     mode: body.mode,
@@ -82,8 +82,8 @@ export const POST = withRoute(async (req: NextRequest) => {
 export const GET = withRoute(async () => {
   const session = await requireLicense();
   const rows = getDb()
-    .prepare("SELECT * FROM jobs WHERE license_id = ? ORDER BY created_at DESC LIMIT 8")
-    .all(session.licenseId);
+    .prepare("SELECT * FROM jobs WHERE account_id = ? ORDER BY created_at DESC LIMIT 8")
+    .all(session.accountId);
   return ok({
     jobs: rows.map((row) => jobRowToView(row as Parameters<typeof jobRowToView>[0])),
   });

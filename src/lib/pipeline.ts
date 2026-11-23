@@ -76,6 +76,7 @@ export function assertGenerationAllowance(license: LicenseRow) {
 export type JobRow = {
   id: string;
   license_id: string;
+  account_id: string | null;
   status: JobView["status"];
   stage: JobStage;
   progress: number;
@@ -116,15 +117,15 @@ export function jobRowToView(row: JobRow): JobView {
   };
 }
 
-export function createJob(licenseId: string, payload: JobPayload): JobView {
+export function createJob(accountId: string, licenseId: string, payload: JobPayload): JobView {
   const id = `job_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   const now = Date.now();
   getDb()
     .prepare(
-      `INSERT INTO jobs (id, license_id, status, stage, progress, payload, cancelled, created_at, updated_at)
-       VALUES (?, ?, 'queued', 'queued', 0, ?, 0, ?, ?)`,
+      `INSERT INTO jobs (id, license_id, account_id, status, stage, progress, payload, cancelled, created_at, updated_at)
+       VALUES (?, ?, ?, 'queued', 'queued', 0, ?, 0, ?, ?)`,
     )
-    .run(id, licenseId, JSON.stringify(payload), now, now);
+    .run(id, licenseId, accountId, JSON.stringify(payload), now, now);
 
   // Keep the table small.
   getDb()
@@ -298,8 +299,8 @@ async function runJob(jobId: string, config: ResolvedAiConfig) {
     } else if (payload.reference.kind === "file") {
       guard();
       const file = db
-        .prepare("SELECT * FROM files WHERE id = ? AND license_id = ?")
-        .get(payload.reference.fileId ?? "", row.license_id) as
+        .prepare("SELECT * FROM files WHERE id = ? AND account_id = ?")
+        .get(payload.reference.fileId ?? "", row.account_id) as
         | { id: string; path: string; name: string; size: number }
         | undefined;
       if (!file) {
@@ -475,6 +476,7 @@ async function runJob(jobId: string, config: ResolvedAiConfig) {
     setStage("finalizing", 95);
     const generationMs = Date.now() - startedAt;
     const script = insertScript({
+      accountId: row.account_id ?? "",
       licenseId: row.license_id,
       title,
       hook,
@@ -524,12 +526,13 @@ async function runJob(jobId: string, config: ResolvedAiConfig) {
 /* -------------------------------- actions -------------------------------- */
 
 export async function runScriptAction(input: {
+  accountId: string;
   licenseId: string;
   script: ScriptRow;
   action: "regenerate" | "new_version" | "improve_hook" | "more_engaging" | "shorten" | "expand";
   config: ResolvedAiConfig;
 }): Promise<ReturnType<typeof getScript>> {
-  const { script, licenseId, config, action } = input;
+  const { script, accountId, licenseId, config, action } = input;
   const started = Date.now();
   const modeConfig = MODE_CONFIG[(script.mode as Mode) ?? "balanced"] ?? MODE_CONFIG.balanced;
 
@@ -614,6 +617,7 @@ export async function runScriptAction(input: {
       : body.split(/\n+/)[0].slice(0, 240);
 
   const created = insertScript({
+    accountId,
     licenseId,
     parentId: script.id,
     title,
@@ -632,7 +636,7 @@ export async function runScriptAction(input: {
   });
 
   recordGeneration(licenseId, config.provider, config.model);
-  return getScript(licenseId, created.id);
+  return getScript(accountId, created.id);
 }
 
 // Re-exported for API routes that need YouTube metadata without pulling the pipeline.

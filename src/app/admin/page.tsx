@@ -35,7 +35,14 @@ type SettingsMap = {
   max_upload_mb: number;
 };
 
-const EMPTY_FORM = { label: "", quantity: 1, expiresInDays: 0, generationLimit: 0, notes: "" };
+const EMPTY_FORM = {
+  customerName: "",
+  quantity: 1,
+  expiry: "lifetime" as "lifetime" | "30" | "90" | "180" | "365",
+  expiresInDays: 0,
+  generationLimit: 0,
+  notes: "",
+};
 
 export default function AdminPage() {
   const [authed, setAuthed] = useState<boolean | null>(null);
@@ -336,7 +343,7 @@ export default function AdminPage() {
             {(
               [
                 ["overview", "Overview", BarChart3],
-                ["licenses", "Licenses", KeyRound],
+                ["licenses", "License Management", KeyRound],
                 ["settings", "Settings", Settings],
               ] as [Tab, string, typeof BarChart3][]
             ).map(([id, label, Icon]) => (
@@ -520,13 +527,13 @@ export default function AdminPage() {
                 <form onSubmit={createLicenses} className="mt-4 space-y-3">
                   <div>
                     <label htmlFor="license-label" className="label">
-                      Label (optional)
+                      Customer name (optional)
                     </label>
                     <input
                       id="license-label"
-                      value={form.label}
-                      onChange={(event) => setForm({ ...form, label: event.target.value })}
-                      placeholder="e.g. Newsletter launch"
+                      value={form.customerName}
+                      onChange={(event) => setForm({ ...form, customerName: event.target.value })}
+                      placeholder="e.g. Jordan Lee"
                       className="input input-sm"
                     />
                   </div>
@@ -546,18 +553,23 @@ export default function AdminPage() {
                       />
                     </div>
                     <div>
-                      <label htmlFor="license-days" className="label">
-                        Valid days
+                      <label htmlFor="license-expiry" className="label">
+                        Expiration
                       </label>
-                      <input
-                        id="license-days"
-                        type="number"
-                        min={0}
-                        max={3650}
-                        value={form.expiresInDays}
-                        onChange={(event) => setForm({ ...form, expiresInDays: Number(event.target.value) })}
+                      <select
+                        id="license-expiry"
+                        value={form.expiry}
+                        onChange={(event) =>
+                          setForm({ ...form, expiry: event.target.value as typeof form.expiry })
+                        }
                         className="input input-sm"
-                      />
+                      >
+                        <option value="lifetime">Lifetime</option>
+                        <option value="30">30 days</option>
+                        <option value="90">90 days</option>
+                        <option value="180">180 days</option>
+                        <option value="365">365 days</option>
+                      </select>
                     </div>
                     <div>
                       <label htmlFor="license-limit" className="label">
@@ -574,7 +586,9 @@ export default function AdminPage() {
                       />
                     </div>
                   </div>
-                  <p className="text-[10px] text-muted/70">0 days = no expiry. 0 limit = unlimited generations.</p>
+                  <p className="text-[10px] text-muted/70">
+                    Keys are HM-XXXX-XXXX-XXXX and stored only as a hash. 0 gen. limit = unlimited.
+                  </p>
                   <div>
                     <label htmlFor="license-notes" className="label">
                       Notes (optional)
@@ -659,8 +673,8 @@ export default function AdminPage() {
                 <table className="w-full min-w-[780px] text-[11px]">
                   <thead>
                     <tr className="border-y border-white/[0.06] bg-white/[0.015]">
-                      <th className="table-head px-5 py-2.5">Prefix</th>
-                      <th className="table-head px-3 py-2.5">Label</th>
+                      <th className="table-head px-5 py-2.5">Key</th>
+                      <th className="table-head px-3 py-2.5">Customer</th>
                       <th className="table-head px-3 py-2.5">Status</th>
                       <th className="table-head px-3 py-2.5">Usage</th>
                       <th className="table-head px-3 py-2.5">Scripts</th>
@@ -671,7 +685,9 @@ export default function AdminPage() {
                   <tbody>
                     {licenses.map((license) => (
                       <tr key={license.id} className="border-b border-white/[0.04] hover:bg-white/[0.015]">
-                        <td className="px-5 py-3 font-mono text-white/80">{license.keyPrefix}…</td>
+                        <td className="px-5 py-3 font-mono text-white/80">
+                          {license.keyLast4 ? `${license.keyPrefix}••${license.keyLast4}` : `${license.keyPrefix}…`}
+                        </td>
                         <td className="max-w-[180px] truncate px-3 py-3 text-muted">{license.label || "—"}</td>
                         <td className="px-3 py-3">
                           <StatusBadge license={license} />
@@ -754,7 +770,10 @@ export default function AdminPage() {
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 p-5 shadow-2xl">
             <div className="flex items-start justify-between">
               <div>
-                <p className="font-mono text-[11px] text-muted">{selected.keyPrefix}••••••</p>
+                <p className="font-mono text-[11px] text-muted">
+                  {selected.keyLast4 ? `${selected.keyPrefix}••${selected.keyLast4}` : `${selected.keyPrefix}••••••`}
+                </p>
+                <p className="mt-0.5 font-mono text-[10px] text-muted/60">Account {selected.accountId || "—"}</p>
                 <h3 className="mt-1 font-display text-base font-semibold">
                   {selected.label || "License settings"}
                 </h3>
@@ -826,7 +845,7 @@ export default function AdminPage() {
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                 Save changes
               </button>
-              {selected.status === "active" ? (
+              {selected.status !== "revoked" ? (
                 <button
                   onClick={() => void patchLicense(selected.id, { action: "revoke" }, () => setSelected(null))}
                   disabled={busy}
@@ -862,18 +881,19 @@ export default function AdminPage() {
   );
 }
 
+const STATUS_STYLES: Record<string, string> = {
+  active: "border-neon-400/30 bg-neon-400/[0.06] text-neon-400",
+  unused: "border-lavender-400/30 bg-lavender-400/[0.06] text-lavender-300",
+  expired: "border-amber-400/30 bg-amber-400/[0.06] text-amber-300",
+  revoked: "border-red-500/30 bg-red-500/[0.06] text-red-300",
+};
+
 function StatusBadge({ license }: { license: AdminLicenseRow }) {
-  const expired = license.expiresAt != null && license.expiresAt <= Date.now();
-  const label = license.status === "revoked" ? "Revoked" : expired ? "Expired" : "Active";
-  const styles =
-    label === "Active"
-      ? "border-neon-400/30 bg-neon-400/[0.06] text-neon-400"
-      : label === "Expired"
-        ? "border-amber-400/30 bg-amber-400/[0.06] text-amber-300"
-        : "border-red-500/30 bg-red-500/[0.06] text-red-300";
+  const label = license.status.charAt(0).toUpperCase() + license.status.slice(1);
+  const styles = STATUS_STYLES[license.status] ?? STATUS_STYLES.revoked;
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] ${styles}`}>
-      {label === "Active" && <Check className="h-2.5 w-2.5" />}
+      {license.status === "active" && <Check className="h-2.5 w-2.5" />}
       {label}
     </span>
   );

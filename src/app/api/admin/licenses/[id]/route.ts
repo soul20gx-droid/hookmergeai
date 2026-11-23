@@ -29,9 +29,13 @@ export const PATCH = withRoute(async (req: NextRequest, ctx) => {
   }
 
   const patch: Parameters<typeof updateLicense>[1] = {};
-  if (body.label !== undefined) patch.label = body.label || null;
+  const name = body.customerName ?? body.label;
+  if (name !== undefined) patch.label = name || null;
   if (body.notes !== undefined) patch.notes = body.notes || null;
-  if (body.clearExpiry) patch.expiresAt = null;
+  if (body.expiry !== undefined) {
+    const days = body.expiry === "lifetime" ? 0 : Number(body.expiry);
+    patch.expiresAt = days > 0 ? Date.now() + days * 24 * 60 * 60 * 1000 : null;
+  } else if (body.clearExpiry) patch.expiresAt = null;
   else if (body.expiresInDays !== undefined) {
     patch.expiresAt =
       body.expiresInDays > 0 ? Date.now() + body.expiresInDays * 24 * 60 * 60 * 1000 : null;

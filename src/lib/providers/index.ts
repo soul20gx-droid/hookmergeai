@@ -11,6 +11,7 @@ export type { ResolvedAiConfig, ChatMessage, ChatOptions };
 
 export type StoredAiConfigRow = {
   license_id: string;
+  account_id: string | null;
   provider: string;
   base_url: string;
   model: string;
@@ -19,10 +20,10 @@ export type StoredAiConfigRow = {
   updated_at: number;
 };
 
-export function getStoredAiConfig(licenseId: string): StoredAiConfigRow | null {
+export function getStoredAiConfig(accountId: string): StoredAiConfigRow | null {
   const row = getDb()
-    .prepare("SELECT * FROM ai_configs WHERE license_id = ?")
-    .get(licenseId) as StoredAiConfigRow | undefined;
+    .prepare("SELECT * FROM ai_configs WHERE account_id = ?")
+    .get(accountId) as StoredAiConfigRow | undefined;
   return row ?? null;
 }
 

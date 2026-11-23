@@ -16,7 +16,7 @@ export const GET = withRoute(async (_req: NextRequest, ctx) => {
   const session = await requireLicense();
   const { id } = await ctx.params;
   const row = getJobRow(id);
-  if (!row || row.license_id !== session.licenseId) {
+  if (!row || row.account_id !== session.accountId) {
     throw new ApiError("job_not_found", "That generation could not be found.", 404);
   }
   return ok({ job: jobRowToView(refreshStaleJob(row)) });
@@ -26,7 +26,7 @@ export const DELETE = withRoute(async (_req: NextRequest, ctx) => {
   const session = await requireLicense();
   const { id } = await ctx.params;
   const row = getJobRow(id);
-  if (!row || row.license_id !== session.licenseId) {
+  if (!row || row.account_id !== session.accountId) {
     throw new ApiError("job_not_found", "That generation could not be found.", 404);
   }
   if (row.status === "queued" || row.status === "running") {

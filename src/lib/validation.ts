@@ -1,8 +1,15 @@
 import { z } from "zod";
 
 export const licenseKeySchema = z.object({
-  key: z.string().trim().min(1, "Enter your license key").max(200, "That key is too long"),
+  key: z
+    .string()
+    .trim()
+    .min(1, "Enter your license key")
+    .max(100, "That key is too long")
+    .regex(/^[A-Za-z0-9-]+$/, "That doesn't look like a license key"),
 });
+
+export const licenseExpirySchema = z.enum(["lifetime", "30", "90", "180", "365"]);
 
 export const modeSchema = z.enum(["fast", "balanced", "premium"]);
 export const durationSchema = z.union([
@@ -70,8 +77,10 @@ export const adminLoginSchema = z.object({
 });
 
 export const adminLicenseCreateSchema = z.object({
+  customerName: z.string().trim().max(120).optional().default(""),
   label: z.string().trim().max(120).optional().default(""),
   quantity: z.coerce.number().int().min(1).max(50).default(1),
+  expiry: licenseExpirySchema.optional(),
   expiresInDays: z.coerce.number().int().min(0).max(3650).default(0),
   generationLimit: z.coerce.number().int().min(0).max(100000).default(0),
   notes: z.string().trim().max(500).optional().default(""),
@@ -80,6 +89,8 @@ export const adminLicenseCreateSchema = z.object({
 export const adminLicensePatchSchema = z
   .object({
     action: z.enum(["revoke", "activate", "delete", "update"]).optional(),
+    customerName: z.string().trim().max(120).optional(),
+    expiry: licenseExpirySchema.optional(),
     label: z.string().trim().max(120).optional(),
     expiresInDays: z.coerce.number().int().min(0).max(3650).optional(),
     clearExpiry: z.boolean().optional(),
